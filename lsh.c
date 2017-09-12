@@ -27,6 +27,11 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/errno.h>
+
 
 /*
  * Function declarations
@@ -36,6 +41,9 @@ void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
 int execute(Command *);
+
+//
+int execM(Pgm*, int, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -92,20 +100,69 @@ int main(void)
 int
 execute(Command *cmd)
 {
-	const char* tmp = cmd->pgm->pgmlist[0];
-	printf("EXECUTE: %s USING ARGS: %s\n", "find", tmp);
-	int *stat;
+	int fdin, fdout, fderr;
+	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
+	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
+	fderr = cmd->rstderr == NULL ? STDERR_FILENO : open(cmd->rstderr, O_WRONLY|O_CREAT);
 
+	return execM(cmd->pgm, fdin, fdout, fderr);
+}
+
+//ls, STDIN, STDOUT, STDERR
+//recurs:
+//switch(fork()) {
+//	case child:
+//		if (next != NULL) {
+//			pipe[child, parent]
+//			dup2(child, STDIN)
+//			dup2(parent, STDOUT)
+//			dup2(fderr, STDERR)
+//
+//			recurs(next, fdin, pipe[child], fderr)
+//		} else {
+//			dup2(fdin, STDIN)
+//			dup2(fdout, STDOUT)
+//			dup2(fderr, STDERR)
+//		}
+//		execvp(pgm, prmgparam);
+//	default:
+//		wait(NULL)
+//}
+int
+execM(Pgm* pgm, int fdin, int fdout, int fderr)
+{
+	int *stat;
+	// Add the (char*)NULL to pgmlist (required by execvp)
+	int size = sizeof(pgm->pgmlist);
+	char* tmp[size+1];
+
+	for (int i=0; i<size; i++) {
+		tmp[i] = pgm->pgmlist[i];
+	}
+	tmp[size] = (char*)NULL;
+
+	// This command dont need anything piped to it, just execute pgm
 	switch (fork()) {
 		case 0:
-			execlp(tmp, tmp, (char*)NULL);
+			if (pgm->next == NULL) {
+				dup2(fdin, STDIN_FILENO);
+				dup2(fdout, STDOUT_FILENO);
+				dup2(fderr, STDERR_FILENO);
+			} else {
+				int fd[2];
+				pipe(fd);
+
+				fd[0];
+				fd[1];
+			}
+			execvp(tmp[0], tmp);
 			break;
 		default:
-			wait(stat);
+			wait(NULL);
 			break;
 	}
 
-	return 1;
+	return 0;
 }
 
 /*
