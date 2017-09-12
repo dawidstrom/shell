@@ -23,6 +23,11 @@
 #include <readline/history.h>
 #include "parse.h"
 
+//Custom includes
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
 /*
  * Function declarations
  */
@@ -30,6 +35,7 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+int execute(Command *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -66,6 +72,8 @@ int main(void)
         add_history(line);
         /* execute it */
         n = parse(line, &cmd);
+		if (n != -1)
+			execute(&cmd);
         PrintCommand(n, &cmd);
       }
     }
@@ -75,6 +83,29 @@ int main(void)
     }
   }
   return 0;
+}
+/* 
+ * Name: Execute
+ * 
+ * Description: Executes a command
+ */
+int
+execute(Command *cmd)
+{
+	const char* tmp = cmd->pgm->pgmlist[0];
+	printf("EXECUTE: %s USING ARGS: %s\n", "find", tmp);
+	int *stat;
+
+	switch (fork()) {
+		case 0:
+			execlp(tmp, tmp, (char*)NULL);
+			break;
+		default:
+			wait(stat);
+			break;
+	}
+
+	return 1;
 }
 
 /*
