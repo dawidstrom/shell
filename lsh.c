@@ -43,7 +43,7 @@ void stripwhite(char *);
 int execute(Command *);
 
 //
-int execM(Pgm*, int, int, int);
+int exec_rec(Pgm*, int, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -105,7 +105,7 @@ execute(Command *cmd)
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
 	fderr = cmd->rstderr == NULL ? STDERR_FILENO : open(cmd->rstderr, O_WRONLY|O_CREAT);
 
-	return execM(cmd->pgm, fdin, fdout, fderr);
+	return exec_rec(cmd->pgm, fdin, fdout, fderr);
 }
 
 //ls, STDIN, STDOUT, STDERR
@@ -129,7 +129,7 @@ execute(Command *cmd)
 //		wait(NULL)
 //}
 int
-execM(Pgm* pgm, int fdin, int fdout, int fderr)
+exec_rec(Pgm* pgm, int fdin, int fdout, int fderr)
 {
 	int *stat;
 	// Add the (char*)NULL to pgmlist (required by execvp)
@@ -144,16 +144,15 @@ execM(Pgm* pgm, int fdin, int fdout, int fderr)
 	// This command dont need anything piped to it, just execute pgm
 	switch (fork()) {
 		case 0:
+			dup2(fdout, STDOUT_FILENO);
+			dup2(fderr, STDERR_FILENO);
 			if (pgm->next == NULL) {
 				dup2(fdin, STDIN_FILENO);
-				dup2(fdout, STDOUT_FILENO);
-				dup2(fderr, STDERR_FILENO);
 			} else {
 				int fd[2];
 				pipe(fd);
-
-				fd[0];
-				fd[1];
+				dup2(fd[0], STDIN_FILENO);
+				exec_rec(pgm->next, fdin, fd[1], fderr);
 			}
 			execvp(tmp[0], tmp);
 			break;
