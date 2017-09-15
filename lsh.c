@@ -29,7 +29,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/errno.h>
 
 
@@ -43,7 +42,7 @@ void stripwhite(char *);
 int execute(Command *);
 
 //
-int exec_rec(Pgm*, int, int, int);
+int exec_rec(Pgm*, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -92,77 +91,132 @@ int main(void)
   }
   return 0;
 }
+
 /* 
- * Name: Execute
+ * Name: execute
+ *
+ * Parameters:
+ * cmd - Pointer to the command being executed.
  * 
- * Description: Executes a command
+ * Description:
+ * Executes a single command. (see Command)
  */
 int
-execute(Command *cmd)
+execute(Command* cmd)
 {
+	// set fdin and fdout to STDIN and STDOUT if no redirect is given.
 	int fdin, fdout, fderr;
+	int *stat;
+
 	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
-	fderr = cmd->rstderr == NULL ? STDERR_FILENO : open(cmd->rstderr, O_WRONLY|O_CREAT);
 
-	return exec_rec(cmd->pgm, fdin, fdout, fderr);
+	// get the first program.
+	Pgm* p = cmd->pgm; 
+
+	// no idea why i need to print this but code fails otherwise.
+	printf("elos\n");
+
+	// fd[0]=read, fd[1]=write
+	// only one program, no piping needed.
+	if (p->next == NULL) {
+		exec_rec(p, fdin, fdout);
+
+		wait(stat);
+		printf("wait status: %i\n", *stat);
+
+		return 1;
+	}
+
+	// multiple programs, piping is needed.
+	while (p != NULL) {
+		// create pipe.
+		int fd[2];
+		pipe(fd);
+
+		// if last program to run use fdin as input.
+		if (p->next == NULL) {
+			exec_rec(p, fdin, fdout);
+		} else {
+			// execute program p with input from fd[read] and 
+			// output it to fdout.
+			exec_rec(p, fd[0], fdout);
+
+			// save fd[write] to fdout for next program.
+			fdout = fd[1];
+		}
+
+		// go to next program.
+		p = p->next;
+	}
+
+	// wait for all child processes to stop
+	wait(NULL);
+	printf("wait status: %i\n", *stat);
+
+	return 1;
 }
 
-//ls, STDIN, STDOUT, STDERR
-//recurs:
-//switch(fork()) {
-//	case child:
-//		if (next != NULL) {
-//			pipe[child, parent]
-//			dup2(child, STDIN)
-//			dup2(parent, STDOUT)
-//			dup2(fderr, STDERR)
-//
-//			recurs(next, fdin, pipe[child], fderr)
-//		} else {
-//			dup2(fdin, STDIN)
-//			dup2(fdout, STDOUT)
-//			dup2(fderr, STDERR)
-//		}
-//		execvp(pgm, prmgparam);
-//	default:
-//		wait(NULL)
-//}
+/*
+ * Name: exec_rec
+ *
+ * Parameters:
+ * pgm   - The program to execute.
+ * fdin  - The file descriptor program should read input from.
+ * fdout - The file descriptor program should write output to.
+ *
+ * Description: 
+ * Runs a single program, reads input from fdin and writes 
+ * output to fdout.
+ */
 int
-exec_rec(Pgm* pgm, int fdin, int fdout, int fderr)
+exec_rec(Pgm* pgm, int fdin, int fdout)
 {
+	// EXTRACT ARGUMENTS <start>
 	int *stat;
-	// Add the (char*)NULL to pgmlist (required by execvp)
-	int size = sizeof(pgm->pgmlist);
-	char* tmp[size+1];
+	int size = 0;
 
-	for (int i=0; i<size; i++) {
+	char** t = pgm->pgmlist;
+
+	// calculate size of program+arguments.
+	while (*t) {
+		size++;
+		*t++;
+	}
+
+	// add extra room for (char*)NULL.
+	size++;
+	char* tmp[size];
+
+	// add program+arguments to tmp.
+	for (int i=0; i<size-1; i++) {
 		tmp[i] = pgm->pgmlist[i];
 	}
-	tmp[size] = (char*)NULL;
 
-	// This command dont need anything piped to it, just execute pgm
-	switch (fork()) {
-		case 0:
-			dup2(fdout, STDOUT_FILENO);
-			dup2(fderr, STDERR_FILENO);
-			if (pgm->next == NULL) {
+	// Add the (char*)NULL to pgmlist (required by execvp).
+	tmp[size] = NULL;
+
+	// EXTRACT PROGRAM AND ARGUMENTS <end>
+
+	switch(fork()) {
+		case 0: // child runs command.
+			if (fdin != 0) {
 				dup2(fdin, STDIN_FILENO);
-			} else {
-				int fd[2];
-				pipe(fd);
-				dup2(fd[0], STDIN_FILENO);
-				exec_rec(pgm->next, fdin, fd[1], fderr);
+				close(fdin);
 			}
-			execvp(tmp[0], tmp);
-			break;
-		default:
-			wait(NULL);
+			if (fdout != 1) {
+				dup2(fdout, STDOUT_FILENO);
+				close(fdout);
+			}
+
+			return execvp(tmp[0], (char * const *) tmp);
+		default: // parent don't wait since we want to execute more programs.
 			break;
 	}
 
-	return 0;
+	return 1;
 }
+
 
 /*
  * Name: PrintCommand
