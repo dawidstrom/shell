@@ -39,9 +39,8 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-int execute(Command *);
 
-//
+int execute(Command *);
 int exec_rec(Pgm*, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
@@ -105,56 +104,12 @@ int
 execute(Command* cmd)
 {
 	// set fdin and fdout to STDIN and STDOUT if no redirect is given.
-	int fdin, fdout, fderr;
-	int *stat;
+	int fdin, fdout;
 
 	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
 
-	// get the first program.
-	Pgm* p = cmd->pgm; 
-
-	// no idea why i need to print this but code fails otherwise.
-	printf("elos\n");
-
-	// fd[0]=read, fd[1]=write
-	// only one program, no piping needed.
-	if (p->next == NULL) {
-		exec_rec(p, fdin, fdout);
-
-		wait(stat);
-		printf("wait status: %i\n", *stat);
-
-		return 1;
-	}
-
-	// multiple programs, piping is needed.
-	while (p != NULL) {
-		// create pipe.
-		int fd[2];
-		pipe(fd);
-
-		// if last program to run use fdin as input.
-		if (p->next == NULL) {
-			exec_rec(p, fdin, fdout);
-		} else {
-			// execute program p with input from fd[read] and 
-			// output it to fdout.
-			exec_rec(p, fd[0], fdout);
-
-			// save fd[write] to fdout for next program.
-			fdout = fd[1];
-		}
-
-		// go to next program.
-		p = p->next;
-	}
-
-	// wait for all child processes to stop
-	wait(NULL);
-	printf("wait status: %i\n", *stat);
-
-	return 1;
+	return exec_rec(cmd->pgm, fdin, fdout);
 }
 
 /*
@@ -172,47 +127,25 @@ execute(Command* cmd)
 int
 exec_rec(Pgm* pgm, int fdin, int fdout)
 {
-	// EXTRACT ARGUMENTS <start>
-	int *stat;
-	int size = 0;
-
-	char** t = pgm->pgmlist;
-
-	// calculate size of program+arguments.
-	while (*t) {
-		size++;
-		*t++;
+	const char* bin = pgm->pgmlist[0];
+	const char* arg = pgm->pgmlist[1];
+	
+	int fd[2];
+	pipe(fd);
+		
+	if( pgm->next != NULL )
+		exec_rec(pgm->next, fdin, fd[1]);
+		close(fd[1]);
+	
+	if( fork() == 0 )
+	{	
+		dup2(fd[0], STDIN_FILENO);
+		dup2(fdout, STDOUT_FILENO);
+		close(fd[0]);
+		execlp(bin, bin, arg, (char*)NULL);
 	}
 
-	// add extra room for (char*)NULL.
-	size++;
-	char* tmp[size];
-
-	// add program+arguments to tmp.
-	for (int i=0; i<size-1; i++) {
-		tmp[i] = pgm->pgmlist[i];
-	}
-
-	// Add the (char*)NULL to pgmlist (required by execvp).
-	tmp[size] = NULL;
-
-	// EXTRACT PROGRAM AND ARGUMENTS <end>
-
-	switch(fork()) {
-		case 0: // child runs command.
-			if (fdin != 0) {
-				dup2(fdin, STDIN_FILENO);
-				close(fdin);
-			}
-			if (fdout != 1) {
-				dup2(fdout, STDOUT_FILENO);
-				close(fdout);
-			}
-
-			return execvp(tmp[0], (char * const *) tmp);
-		default: // parent don't wait since we want to execute more programs.
-			break;
-	}
+	wait(NULL);
 
 	return 1;
 }
