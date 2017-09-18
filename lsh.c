@@ -41,7 +41,7 @@ void PrintPgm(Pgm *);
 void stripwhite(char *);
 
 int execute(Command *);
-int exec_rec(Pgm*, int, int);
+int exec_rec(Pgm*, int, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -109,7 +109,12 @@ execute(Command* cmd)
 	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
 
-	return exec_rec(cmd->pgm, fdin, fdout);
+	int size = exec_rec(cmd->pgm, fdin, fdout, 0);
+	for( size; size>-2; size-- )
+	{
+		wait(NULL);
+	}
+	return 1;
 }
 
 /*
@@ -125,7 +130,7 @@ execute(Command* cmd)
  * output to fdout.
  */
 int
-exec_rec(Pgm* pgm, int fdin, int fdout)
+exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 {
 	const char* bin = pgm->pgmlist[0];
 	const char* arg = pgm->pgmlist[1];
@@ -134,7 +139,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout)
 	pipe(fd);
 		
 	if( pgm->next != NULL )
-		exec_rec(pgm->next, fdin, fd[1]);
+		exec_rec(pgm->next, fdin, fd[1], size);
 		close(fd[1]);
 	
 	if( fork() == 0 )
@@ -145,9 +150,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout)
 		execlp(bin, bin, arg, (char*)NULL);
 	}
 
-	wait(NULL);
-
-	return 1;
+	return size++;
 }
 
 
