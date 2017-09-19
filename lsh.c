@@ -42,9 +42,25 @@ void stripwhite(char *);
 
 int execute(Command *);
 int exec_rec(Pgm*, int, int, int);
+void sig_handler(int);
+
+int pids[256];
+int pi = 0;
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+
+void
+sig_handler(int sig)
+{
+	pi--;
+	for( pi; pi>=0; pi-- )
+	{
+		printf(" %d\n", pids[pi]);
+		kill(SIGTERM, pids[pi]);
+	}
+	pi++;
+}
 
 /*
  * Name: main
@@ -56,6 +72,8 @@ int main(void)
 {
   Command cmd;
   int n;
+
+  signal(SIGINT, sig_handler);
 
   while (!done) {
 
@@ -109,11 +127,15 @@ execute(Command* cmd)
 	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
 
-	int size = exec_rec(cmd->pgm, fdin, fdout, 0);
-	for( size; size>-2; size-- )
+	int size = exec_rec(cmd->pgm, fdin, fdout, 1);
+	for( size; size>=0; size-- )
 	{
-		wait(NULL);
+		if( cmd->bakground )
+			waitpid(-1, NULL, WNOHANG);
+		else
+			wait(NULL);
 	}
+	pi = 0;
 	return 1;
 }
 
@@ -139,10 +161,14 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 	pipe(fd);
 		
 	if( pgm->next != NULL )
+	{
 		exec_rec(pgm->next, fdin, fd[1], size);
 		close(fd[1]);
+	}
+
+	int pid = fork();
 	
-	if( fork() == 0 )
+	if( pid == 0 )
 	{	
 		dup2(fd[0], STDIN_FILENO);
 		dup2(fdout, STDOUT_FILENO);
@@ -150,9 +176,11 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 		execlp(bin, bin, arg, (char*)NULL);
 	}
 
+	pids[pi] = pid;
+	pi++;
+
 	return size++;
 }
-
 
 /*
  * Name: PrintCommand
