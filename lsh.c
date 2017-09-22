@@ -56,7 +56,6 @@ sig_handler(int sig)
 	pi--;
 	for( pi; pi>=0; pi-- )
 	{
-		printf(" %d\n", pids[pi]);
 		kill(SIGTERM, pids[pi]);
 	}
 	pi++;
@@ -154,9 +153,18 @@ execute(Command* cmd)
 int
 exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 {
-	const char* bin = pgm->pgmlist[0];
-	const char* arg = pgm->pgmlist[1];
-	
+	if (strcmp(pgm->pgmlist[0], "exit") == 0)
+	{
+		exit(0);
+	}
+	else if (strcmp(pgm->pgmlist[0], "cd") == 0)
+	{
+		if (chdir(pgm->pgmlist[1]) == -1)
+			perror(pgm->pgmlist[1]);
+			
+		return 0;
+	}
+
 	int fd[2];
 	pipe(fd);
 		
@@ -170,10 +178,17 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 	
 	if( pid == 0 )
 	{	
-		dup2(fd[0], STDIN_FILENO);
+		if (pgm->next != NULL)
+			dup2(fd[0], STDIN_FILENO);
+		else
+			dup2(fdin, STDIN_FILENO);
 		dup2(fdout, STDOUT_FILENO);
 		close(fd[0]);
-		execlp(bin, bin, arg, (char*)NULL);
+		if (execvp(pgm->pgmlist[0], pgm->pgmlist))
+		{
+			perror(pgm->pgmlist[0]);
+			exit(0);	
+		}
 	}
 
 	pids[pi] = pid;
