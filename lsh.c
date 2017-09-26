@@ -41,7 +41,7 @@ void PrintPgm(Pgm *);
 void stripwhite(char *);
 
 int execute(Command *);
-int exec_rec(Pgm*, int, int, int, int);
+void exec_rec(Pgm*, int, int, int*, int);
 void sigint_handler(int);
 void sigchld_handler(int);
 
@@ -134,8 +134,10 @@ execute(Command* cmd)
 	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
 
-	int size = exec_rec(cmd->pgm, fdin, fdout, 1, cmd->bakground);
-	for( size; size>0; size-- )
+	int zero = 0;
+	int* size = &zero; 
+	exec_rec(cmd->pgm, fdin, fdout, size, cmd->bakground);
+	for( int i = *size; i>0; i-- )
 	{
 		wait(NULL);
 	}
@@ -155,9 +157,10 @@ execute(Command* cmd)
  * Runs a single program, reads input from fdin and writes 
  * output to fdout.
  */
-int
-exec_rec(Pgm* pgm, int fdin, int fdout, int size, int bg)
+void
+exec_rec(Pgm* pgm, int fdin, int fdout, int* size, int bg)
 {
+	*size = bg ? 0 : (*size)+1;
 	if (strcmp(pgm->pgmlist[0], "exit") == 0)
 	{
 		exit(0);
@@ -166,8 +169,6 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size, int bg)
 	{
 		if (chdir(pgm->pgmlist[1]) == -1)
 			perror(pgm->pgmlist[1]);
-			
-		return -1;
 	}
 
 	int fd[2];
@@ -175,7 +176,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size, int bg)
 		
 	if( pgm->next != NULL )
 	{
-		exec_rec(pgm->next, fdin, fd[1], size++, bg);
+		exec_rec(pgm->next, fdin, fd[1], size, bg);
 		close(fd[1]);
 	}
 
@@ -183,7 +184,9 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size, int bg)
 	
 	if( pid == 0 )
 	{	
-		setpgid(0,0);
+		if( bg )
+			setpgid(0,0);
+
 		if (pgm->next != NULL)
 			dup2(fd[0], STDIN_FILENO);
 		else
@@ -202,11 +205,6 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size, int bg)
 		pids[pi] = pid;
 		pi++;
 	}
-
-	if( bg )
-		return -1;
-	else
-		return size;
 }
 
 /*
