@@ -41,8 +41,9 @@ void PrintPgm(Pgm *);
 void stripwhite(char *);
 
 int execute(Command *);
-int exec_rec(Pgm*, int, int, int);
-void sig_handler(int);
+int exec_rec(Pgm*, int, int, int, int);
+void sigint_handler(int);
+void sigchld_handler(int);
 
 int pids[256];
 int pi = 0;
@@ -51,7 +52,7 @@ int pi = 0;
 int done = 0;
 
 void
-sig_handler(int sig)
+sigint_handler(int sig)
 {
 	pi--;
 	for( pi; pi>=0; pi-- )
@@ -59,6 +60,12 @@ sig_handler(int sig)
 		kill(SIGTERM, pids[pi]);
 	}
 	pi++;
+}
+
+void
+sigchld_handler(int sig)
+{
+	waitpid(-1, NULL, WNOHANG);
 }
 
 /*
@@ -72,7 +79,8 @@ int main(void)
   Command cmd;
   int n;
 
-  signal(SIGINT, sig_handler);
+  signal(SIGINT, sigint_handler);
+  signal(SIGCHLD, sigchld_handler);
 
   while (!done) {
 
@@ -126,13 +134,10 @@ execute(Command* cmd)
 	fdin = cmd->rstdin == NULL ? STDIN_FILENO : open(cmd->rstdin, O_RDONLY);
 	fdout = cmd->rstdout == NULL ? STDOUT_FILENO : open(cmd->rstdout, O_WRONLY|O_CREAT);
 
-	int size = exec_rec(cmd->pgm, fdin, fdout, 1);
-	for( size; size>=0; size-- )
+	int size = exec_rec(cmd->pgm, fdin, fdout, 1, cmd->bakground);
+	for( size; size>0; size-- )
 	{
-		if( cmd->bakground )
-			waitpid(-1, NULL, WNOHANG);
-		else
-			wait(NULL);
+		wait(NULL);
 	}
 	pi = 0;
 	return 1;
@@ -151,7 +156,7 @@ execute(Command* cmd)
  * output to fdout.
  */
 int
-exec_rec(Pgm* pgm, int fdin, int fdout, int size)
+exec_rec(Pgm* pgm, int fdin, int fdout, int size, int bg)
 {
 	if (strcmp(pgm->pgmlist[0], "exit") == 0)
 	{
@@ -162,7 +167,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 		if (chdir(pgm->pgmlist[1]) == -1)
 			perror(pgm->pgmlist[1]);
 			
-		return 0;
+		return -1;
 	}
 
 	int fd[2];
@@ -170,7 +175,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 		
 	if( pgm->next != NULL )
 	{
-		exec_rec(pgm->next, fdin, fd[1], size);
+		exec_rec(pgm->next, fdin, fd[1], size++, bg);
 		close(fd[1]);
 	}
 
@@ -178,6 +183,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 	
 	if( pid == 0 )
 	{	
+		setpgid(0,0);
 		if (pgm->next != NULL)
 			dup2(fd[0], STDIN_FILENO);
 		else
@@ -191,10 +197,16 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int size)
 		}
 	}
 
-	pids[pi] = pid;
-	pi++;
+	if (!bg)
+	{
+		pids[pi] = pid;
+		pi++;
+	}
 
-	return size++;
+	if( bg )
+		return -1;
+	else
+		return size;
 }
 
 /*
