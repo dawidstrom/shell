@@ -169,6 +169,7 @@ exec_rec(Pgm* pgm, int fdin, int fdout, int* size, int bg)
 	{
 		if (chdir(pgm->pgmlist[1]) == -1)
 			perror(pgm->pgmlist[1]);
+		return;
 	}
 
 	int fd[2];
