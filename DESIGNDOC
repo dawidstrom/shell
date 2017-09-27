@@ -20,6 +20,8 @@ David Ström <stromda@student.chalmers.se>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course instructors.
 
+man pages, stackoverflow
+
 			   COMMAND SHELL
 			   =============
 
@@ -32,9 +34,12 @@ which parts.
 >> L1: How many hours did each team member spend on this assignment?
    Make sure that each member's total time is listed.
 
+Rouch estimate of 30h per team member
+
 >> L2: What did each team member focus on for this assignment?  Keep
    descriptions to 25-30 words or less.
 
+The assignment has been a joint effort. No division of work/focus.	
 
 			  SURVEY QUESTIONS
 			  ================
@@ -48,18 +53,39 @@ penalized.  We can't fix things until we know about them.  :-)
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
 
+Understanding how to work with file descriptors took a long time.
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
+NA
+
 >> Were there any parts of the assignment that you felt were unnecessarily
 >> tedious or pointless?
+
+No
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
+How and when to properly close file descriptors!
+
 >> Do you have any suggestions for the instructor and/or TAs to more
 >> effectively assist students, either for future quarters or the remaining
 >> projects?
 
+No
+
 >> Any other comments?
+
+We would really appreciate if you make lecture material available earlier. Some
+like to look through the material prior to lectures which is very difficult when
+it is made available sub 24h prior to the lecture.
+
+<start of example>
+Received wednesday 9:43
+Take a look a X before thursday lecture 10:00
+<end of eample>
+
+These kind of things makes it really hard for us to plan our work.
